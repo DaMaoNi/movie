@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}浏览 - {{ current_path }}{% endblock %}
+
+{% block content %}
+<div style="padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 20px;">
+    <a href="{{ url_for('index') }}" style="color: #e94560; text-decoration: none;">首页</a>
+    <span style="color: #888;"> | </span>
+    <span>{{ current_path }}</span>
+</div>
+
+{% if items %}
+<div class="item-list">
+    {% for item in items %}
+    <div class="item">
+        <div class="item-icon">{% if item.is_dir %}📁{% else %}🎬{% endif %}</div>
+        <div class="item-name">
+            {% if item.is_dir %}
+            <a href="{{ url_for('browse', path=current_path + '/' + item.name) }}" style="color: white; text-decoration: none;">{{ item.name }}</a>
+            {% else %}
+            {{ item.name }}
+            {% endif %}
+        </div>
+        {% if item.size %}<div class="item-size">{{ item.size }}</div>{% endif %}
+        <div>
+            {% if item.is_dir %}
+            <a href="{{ url_for('browse', path=current_path + '/' + item.name) }}">
+                <button class="btn">打开</button>
+            </a>
+            {% elif item.is_video %}
+            <button class="btn" onclick="playVideo('{{ current_path }}/{{ item.name }}')">播放</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p>该目录下没有内容</p></div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function playVideo(filePath) {
+    fetch(`/api/direct_play/${encodeURIComponent(filePath)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = `potplayer://${data.raw_url}`;
+            } else {
+                alert('获取播放链接失败');
+            }
+        });
+}
+</script>
+{% endblock %}

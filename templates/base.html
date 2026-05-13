@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}小雅影视{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .header {
+            background: rgba(0,0,0,0.3);
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 { font-size: 20px; color: #e94560; }
+        .header a { color: #fff; text-decoration: none; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .item-list { background: rgba(255,255,255,0.05); border-radius: 12px; overflow: hidden; }
+        .item {
+            display: flex; align-items: center; padding: 15px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .item:hover { background: rgba(233,69,96,0.1); }
+        .item:last-child { border-bottom: none; }
+        .item-icon { font-size: 24px; margin-right: 15px; }
+        .item-name { flex: 1; font-size: 16px; }
+        .item-size { color: #888; font-size: 14px; margin-right: 15px; }
+        .btn {
+            padding: 8px 16px; background: #e94560; border: none;
+            border-radius: 5px; color: white; cursor: pointer;
+        }
+        .btn:hover { background: #ff6b6b; }
+        .empty { text-align: center; padding: 60px 0; color: #888; }
+        .footer { text-align: center; padding: 30px; color: #666; margin-top: 50px; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="header">
+        <h1><a href="{{ url_for('index') }}">🎬 小雅影视</a></h1>
+    </div>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    <div class="footer">数据来源: 小雅Alist</div>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
