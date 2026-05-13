@@ -1,13 +1,18 @@
 # 小雅影视
 
-基于 Flask 的影视搜索播放网站，调用小雅 Alist 数据源，支持本地 PotPlayer 播放。
+基于 Flask 的影视搜索播放网站，支持本地 PotPlayer 播放。
 
 ## 功能特性
 
 - 🔍 搜索影视资源 - 支持搜索电影、电视剧、动漫、纪录片等
 - 🎬 PotPlayer 播放 - 直接调用本地 PotPlayer 播放视频
 - 📁 文件夹浏览 - 支持浏览文件夹目录结构
-- 🎥 视频直链 - 获取 115 CDN 直链，播放流畅
+- 🎥 视频直链 - 获取直链，播放流畅
+
+## 环境要求
+
+- Python 3.8+
+- PotPlayer (需提前安装)
 
 ## 运行方式
 
@@ -44,13 +49,9 @@ movie/
 | `/browse?path=/xxx` | 浏览文件夹 |
 | `/api/direct_play/<path>` | 获取视频直链 |
 
-## 数据来源
-
-数据来自 [小雅 Alist](http://www.zhanghanhome.cn:5678/)，本项目仅做搜索和播放跳转。
-
 ## 技术栈
 
 - Flask
 - BeautifulSoup4
 - requests
-- PotPlayer (本地播放器)
+- PotPlayer
