@@ -77,7 +77,8 @@ def browse():
 
     items = []
     if result and result.get("code") == 200:
-        for item in result.get("data", {}).get("content", []):
+        content = result.get("data") or {}
+        for item in content.get("content") or []:
             items.append({
                 "name": item["name"],
                 "path": item["name"],
