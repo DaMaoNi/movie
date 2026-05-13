@@ -39,18 +39,4 @@
 {% endif %}
 {% endblock %}
 
-{% block extra_js %}
-<script>
-function playVideo(filePath) {
-    fetch(`/api/direct_play/${encodeURIComponent(filePath)}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                window.location.href = `potplayer://${data.raw_url}`;
-            } else {
-                alert('获取播放链接失败');
-            }
-        });
-}
-</script>
-{% endblock %}
+{% block extra_js %}{% endblock %}

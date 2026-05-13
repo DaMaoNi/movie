@@ -43,22 +43,4 @@
 {% endif %}
 {% endblock %}
 
-{% block extra_js %}
-<script>
-function browseFolder(path) {
-    window.location.href = `/browse?path=${encodeURIComponent(path)}`;
-}
-
-function playVideo(path) {
-    fetch(`/api/direct_play/${encodeURIComponent(path)}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                window.location.href = `potplayer://${data.raw_url}`;
-            } else {
-                alert('获取播放链接失败');
-            }
-        });
-}
-</script>
-{% endblock %}
+{% block extra_js %}{% endblock %}

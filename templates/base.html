@@ -39,6 +39,11 @@
         .btn:hover { background: #ff6b6b; }
         .empty { text-align: center; padding: 60px 0; color: #888; }
         .footer { text-align: center; padding: 30px; color: #666; margin-top: 50px; }
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(233,69,96,0.9); color: #fff; padding: 12px 24px;
+            border-radius: 8px; font-size: 14px; z-index: 999; display: none;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -49,7 +54,35 @@
     <div class="container">
         {% block content %}{% endblock %}
     </div>
-    <div class="footer">数据来源: 小雅Alist</div>
+    <div class="toast" id="toast"></div>
+    <div class="footer">小雅影视</div>
     {% block extra_js %}{% endblock %}
+    <script>
+    function showToast(msg) {
+        var t = document.getElementById('toast');
+        t.textContent = msg;
+        t.style.display = 'block';
+        setTimeout(function() { t.style.display = 'none'; }, 3000);
+    }
+
+    function browseFolder(path) {
+        window.location.href = `/browse?path=${encodeURIComponent(path)}`;
+    }
+
+    function playVideo(path) {
+        fetch(`/api/direct_play/${encodeURIComponent(path)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = `potplayer://${data.raw_url}`;
+                } else {
+                    showToast('资源不可用');
+                }
+            })
+            .catch(function() {
+                showToast('网络请求失败');
+            });
+    }
+    </script>
 </body>
 </html>

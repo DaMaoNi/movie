@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import requests
-from urllib.parse import quote, unquote
+from urllib.parse import unquote
 from bs4 import BeautifulSoup
 
 app = Flask(__name__)
@@ -11,11 +11,6 @@ HEADERS = {
 }
 
 VIDEO_EXTENSIONS = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts'}
-
-
-def get_file_url(path):
-    encoded_path = quote(path)
-    return f"{ALIST_BASE_URL}/d{encoded_path}"
 
 
 def get_raw_url(path):
@@ -136,8 +131,6 @@ def search():
                             "is_dir": False,
                             "is_video": True
                         })
-                    elif text == name or '/' not in href.rstrip('/'):
-                        pass
                     else:
                         all_results.append({
                             "name": text,
