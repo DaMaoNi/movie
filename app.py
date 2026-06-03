@@ -19,7 +19,7 @@ VIDEO_EXTENSIONS = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m
 
 _session = requests.Session()
 _search_cache = {}
-SEARCH_CACHE_TTL = 300
+SEARCH_CACHE_TTL = 3600
 SEARCH_TIMEOUT = 15
 MAX_SEARCH_RESULTS = 200
 
