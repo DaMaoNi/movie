@@ -20,6 +20,7 @@ VIDEO_EXTENSIONS = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m
 _session = requests.Session()
 _search_cache = {}
 SEARCH_CACHE_TTL = 3600
+SEARCH_CACHE_MAX_ENTRIES = 100
 SEARCH_TIMEOUT = 15
 MAX_SEARCH_RESULTS = 200
 
@@ -33,6 +34,9 @@ def _get_cached_search(keyword):
 
 def _set_cached_search(keyword, results):
     _search_cache[keyword] = {"results": results, "time": time.time()}
+    if len(_search_cache) > SEARCH_CACHE_MAX_ENTRIES:
+        oldest = min(_search_cache, key=lambda k: _search_cache[k]["time"])
+        del _search_cache[oldest]
 
 
 def _log_request_time(label, start):
