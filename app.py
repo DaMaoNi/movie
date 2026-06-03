@@ -1,7 +1,12 @@
+import socket
+import time
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import requests
 from urllib.parse import unquote
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
+
+import requests.packages.urllib3.util.connection as urllib3_conn
+urllib3_conn.allowed_gai_family = lambda: socket.AF_INET
 
 app = Flask(__name__)
 
@@ -12,11 +17,35 @@ HEADERS = {
 
 VIDEO_EXTENSIONS = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts'}
 
+_session = requests.Session()
+_search_cache = {}
+SEARCH_CACHE_TTL = 300
+SEARCH_TIMEOUT = 15
+MAX_SEARCH_RESULTS = 200
+
+
+def _get_cached_search(keyword):
+    entry = _search_cache.get(keyword)
+    if entry and time.time() - entry["time"] < SEARCH_CACHE_TTL:
+        return entry["results"]
+    return None
+
+
+def _set_cached_search(keyword, results):
+    _search_cache[keyword] = {"results": results, "time": time.time()}
+
+
+def _log_request_time(label, start):
+    elapsed = time.time() - start
+    print(f"[perf] {label} took {elapsed*1000:.0f}ms")
+
 
 def get_raw_url(path):
+    start = time.time()
     params = {"password": "", "path": path}
     try:
-        resp = requests.get(f"{ALIST_BASE_URL}/api/fs/get", params=params, headers=HEADERS, timeout=30)
+        resp = _session.get(f"{ALIST_BASE_URL}/api/fs/get", params=params, headers=HEADERS, timeout=30)
+        _log_request_time(f"GET /api/fs/get path={path}", start)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("code") == 200:
@@ -27,6 +56,7 @@ def get_raw_url(path):
 
 
 def call_alist_api(path="/", page=1, per_page=50):
+    start = time.time()
     params = {
         "password": "",
         "path": path,
@@ -35,7 +65,8 @@ def call_alist_api(path="/", page=1, per_page=50):
         "refresh": "true"
     }
     try:
-        resp = requests.get(f"{ALIST_BASE_URL}/api/fs/list", params=params, headers=HEADERS, timeout=30)
+        resp = _session.get(f"{ALIST_BASE_URL}/api/fs/list", params=params, headers=HEADERS, timeout=30)
+        _log_request_time(f"GET /api/fs/list path={path}", start)
         if resp.status_code == 200:
             return resp.json()
     except Exception as e:
@@ -100,48 +131,72 @@ def search():
     if not keyword:
         return redirect(url_for("index"))
 
+    cached = _get_cached_search(keyword)
+    if cached is not None:
+        return render_template("search.html", results=cached, keyword=keyword)
+
     all_results = []
+    seen_paths = set()
 
     try:
-        resp = requests.get(
+        req_start = time.time()
+        resp = _session.get(
             f"{ALIST_BASE_URL}/search",
             params={"box": keyword, "type": "video"},
             headers=HEADERS,
-            timeout=60
+            timeout=SEARCH_TIMEOUT,
+            stream=True
         )
-        resp.encoding = 'utf-8'
+        # measure TTFB (time to first byte)
+        ttfb = time.time() - req_start
+        body = resp.content
+        body_size = len(body)
+        total_dl = time.time() - req_start
+        resp.close()
+
+        _log_request_time(f"GET /search keyword={keyword}", req_start)
+        print(f"[perf]   TTFB={ttfb*1000:.0f}ms body_size={body_size/1024:.0f}KB total={total_dl*1000:.0f}ms")
 
         if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, 'lxml')
-            links = soup.find_all('a')
+            strainer = SoupStrainer('a')
+            soup = BeautifulSoup(body, 'lxml', parse_only=strainer)
 
-            seen_paths = set()
+            keyword_lower = keyword.lower()
 
-            for link in links:
+            for link in soup:
                 href = link.get('href', '')
+                if not href.startswith('/') or href in seen_paths:
+                    continue
+
                 text = link.get_text(strip=True)
+                if keyword_lower not in text.lower():
+                    continue
 
-                if href.startswith('/') and keyword.lower() in text.lower() and href not in seen_paths:
-                    seen_paths.add(href)
+                seen_paths.add(href)
 
-                    name = href.split('/')[-1]
-                    if is_video_file(name):
-                        all_results.append({
-                            "name": name,
-                            "path": href,
-                            "is_dir": False,
-                            "is_video": True
-                        })
-                    else:
-                        all_results.append({
-                            "name": text,
-                            "path": href,
-                            "is_dir": True,
-                            "is_video": False
-                        })
+                name = href.split('/')[-1]
+                if is_video_file(name):
+                    all_results.append({
+                        "name": name,
+                        "path": href,
+                        "is_dir": False,
+                        "is_video": True
+                    })
+                else:
+                    all_results.append({
+                        "name": text,
+                        "path": href,
+                        "is_dir": True,
+                        "is_video": False
+                    })
+
+                if len(all_results) >= MAX_SEARCH_RESULTS:
+                    break
 
     except Exception as e:
         print(f"Search error: {e}")
+
+    _set_cached_search(keyword, all_results)
 
     return render_template("search.html",
                          results=all_results,
