@@ -8,7 +8,10 @@ from bs4 import BeautifulSoup, SoupStrainer
 import requests.packages.urllib3.util.connection as urllib3_conn
 urllib3_conn.allowed_gai_family = lambda: socket.AF_INET
 
-app = Flask(__name__)
+import os
+import sys
+_base_dir = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
+app = Flask(__name__, template_folder=os.path.join(_base_dir, 'templates'))
 
 ALIST_BASE_URL = "http://www.zhanghanhome.cn:5678"
 HEADERS = {
