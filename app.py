@@ -1,15 +1,17 @@
 import socket
 import time
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-import requests
 from urllib.parse import unquote
-from bs4 import BeautifulSoup, SoupStrainer
 
+import requests
 import requests.packages.urllib3.util.connection as urllib3_conn
+from bs4 import BeautifulSoup, SoupStrainer
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+
 urllib3_conn.allowed_gai_family = lambda: socket.AF_INET
 
 import os
 import sys
+
 _base_dir = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
 app = Flask(__name__, template_folder=os.path.join(_base_dir, 'templates'))
 
@@ -18,7 +20,7 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 
-VIDEO_EXTENSIONS = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts'}
+VIDEO_EXTENSIONS = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts', 'rmvb'}
 
 _session = requests.Session()
 _search_cache = {}
@@ -44,7 +46,7 @@ def _set_cached_search(keyword, results):
 
 def _log_request_time(label, start):
     elapsed = time.time() - start
-    print(f"[perf] {label} took {elapsed*1000:.0f}ms")
+    print(f"[perf] {label} took {elapsed * 1000:.0f}ms")
 
 
 def get_raw_url(path):
@@ -92,12 +94,12 @@ def is_video_file(name):
 def format_size(size_bytes):
     if size_bytes < 1024:
         return f"{size_bytes}B"
-    elif size_bytes < 1024**2:
-        return f"{size_bytes/1024:.1f}KB"
-    elif size_bytes < 1024**3:
-        return f"{size_bytes/1024**2:.1f}MB"
+    elif size_bytes < 1024 ** 2:
+        return f"{size_bytes / 1024:.1f}KB"
+    elif size_bytes < 1024 ** 3:
+        return f"{size_bytes / 1024 ** 2:.1f}MB"
     else:
-        return f"{size_bytes/1024**3:.2f}GB"
+        return f"{size_bytes / 1024 ** 3:.2f}GB"
 
 
 @app.route("/")
@@ -127,9 +129,9 @@ def browse():
             })
 
     return render_template("browse.html",
-                         items=items,
-                         current_path=decoded_path,
-                         page=page)
+                           items=items,
+                           current_path=decoded_path,
+                           page=page)
 
 
 @app.route("/search")
@@ -162,7 +164,7 @@ def search():
         resp.close()
 
         _log_request_time(f"GET /search keyword={keyword}", req_start)
-        print(f"[perf]   TTFB={ttfb*1000:.0f}ms body_size={body_size/1024:.0f}KB total={total_dl*1000:.0f}ms")
+        print(f"[perf]   TTFB={ttfb * 1000:.0f}ms body_size={body_size / 1024:.0f}KB total={total_dl * 1000:.0f}ms")
 
         if resp.status_code == 200:
             strainer = SoupStrainer('a')
@@ -206,8 +208,8 @@ def search():
     _set_cached_search(keyword, all_results)
 
     return render_template("search.html",
-                         results=all_results,
-                         keyword=keyword)
+                           results=all_results,
+                           keyword=keyword)
 
 
 @app.route("/api/direct_play/<path:file_path>")
