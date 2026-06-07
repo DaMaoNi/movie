@@ -20,8 +20,6 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 }
 
-VIDEO_EXTENSIONS = {'.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts', 'rmvb'}
-
 _session = requests.Session()
 _search_cache = {}
 SEARCH_CACHE_TTL = 3600
@@ -83,14 +81,6 @@ def call_alist_api(path="/", page=1, per_page=50):
     return None
 
 
-def is_video_file(name):
-    name_lower = name.lower()
-    for ext in VIDEO_EXTENSIONS:
-        if name_lower.endswith(ext):
-            return True
-    return False
-
-
 def format_size(size_bytes):
     if size_bytes < 1024:
         return f"{size_bytes}B"
@@ -125,7 +115,7 @@ def browse():
                 "is_dir": item.get("is_dir", False),
                 "size": format_size(item.get("size", 0)) if not item.get("is_dir") else "",
                 "type": item.get("type", 1),
-                "is_video": is_video_file(item["name"]) if not item.get("is_dir") else False
+                "is_video": not item.get("is_dir", False)
             })
 
     return render_template("browse.html",
@@ -184,20 +174,12 @@ def search():
                 seen_paths.add(href)
 
                 name = href.split('/')[-1]
-                if is_video_file(name):
-                    all_results.append({
-                        "name": name,
-                        "path": href,
-                        "is_dir": False,
-                        "is_video": True
-                    })
-                else:
-                    all_results.append({
-                        "name": text,
-                        "path": href,
-                        "is_dir": True,
-                        "is_video": False
-                    })
+                all_results.append({
+                    "name": name or text,
+                    "path": href,
+                    "is_dir": True,
+                    "is_video": False
+                })
 
                 if len(all_results) >= MAX_SEARCH_RESULTS:
                     break
