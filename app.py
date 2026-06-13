@@ -1,208 +1,164 @@
+# -*- coding: utf-8 -*-
+"""
+极简视频搜索 + PotPlayer 播放 Flask 应用
+数据源：http://www.zhanghanhome.cn:5678/tvbox/my.json
+功能：关键词搜索 → 浏览目录 → 获取直链 → PotPlayer 播放
+"""
+
 import socket
-import time
-from urllib.parse import unquote
+_orig_getaddrinfo = socket.getaddrinfo
+def _getaddrinfo_ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = _getaddrinfo_ipv4_only
 
+from flask import Flask, render_template, request, jsonify
 import requests
-import requests.packages.urllib3.util.connection as urllib3_conn
-from bs4 import BeautifulSoup, SoupStrainer
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-
-urllib3_conn.allowed_gai_family = lambda: socket.AF_INET
-
+import re
 import os
-import sys
 
-_base_dir = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
-app = Flask(__name__, template_folder=os.path.join(_base_dir, 'templates'))
+app = Flask(__name__)
 
-ALIST_BASE_URL = "http://www.zhanghanhome.cn:5678"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-}
+# ==================== 配置区 ====================
+# AList 服务器地址（小雅 AList），可通过环境变量覆盖
+ALIST_SERVER = os.environ.get("ALIST_SERVER", "http://www.zhanghanhome.cn:5678")
+# 远端 TVBox JSON 数据地址
+DATA_URL = f"{ALIST_SERVER}/tvbox/my.json"
 
-_session = requests.Session()
-_search_cache = {}
-SEARCH_CACHE_TTL = 3600
-SEARCH_CACHE_MAX_ENTRIES = 100
-SEARCH_TIMEOUT = 15
-MAX_SEARCH_RESULTS = 200
+# 请求超时（秒）
+TIMEOUT = 15
 
 
-def _get_cached_search(keyword):
-    entry = _search_cache.get(keyword)
-    if entry and time.time() - entry["time"] < SEARCH_CACHE_TTL:
-        return entry["results"]
-    return None
-
-
-def _set_cached_search(keyword, results):
-    _search_cache[keyword] = {"results": results, "time": time.time()}
-    if len(_search_cache) > SEARCH_CACHE_MAX_ENTRIES:
-        oldest = min(_search_cache, key=lambda k: _search_cache[k]["time"])
-        del _search_cache[oldest]
-
-
-def _log_request_time(label, start):
-    elapsed = time.time() - start
-    print(f"[perf] {label} took {elapsed * 1000:.0f}ms")
-
-
-def get_raw_url(path):
-    start = time.time()
-    params = {"password": "", "path": path}
+# ==================== 小雅 AList 搜索 ====================
+def search_xiaoya(keyword):
+    """
+    调用小雅 AList 自定义搜索接口 /search?box=关键词&type=video
+    解析返回 HTML 中的目录链接，提取搜索结果
+    """
+    results = []
     try:
-        resp = _session.get(f"{ALIST_BASE_URL}/api/fs/get", params=params, headers=HEADERS, timeout=30)
-        _log_request_time(f"GET /api/fs/get path={path}", start)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("code") == 200:
-                return data.get("data", {}).get("raw_url")
-    except Exception as e:
-        print(f"Get raw URL error: {e}")
-    return None
-
-
-def call_alist_api(path="/", page=1, per_page=50):
-    start = time.time()
-    params = {
-        "password": "",
-        "path": path,
-        "page": page,
-        "per_page": per_page,
-        "refresh": "true"
-    }
-    try:
-        resp = _session.get(f"{ALIST_BASE_URL}/api/fs/list", params=params, headers=HEADERS, timeout=30)
-        _log_request_time(f"GET /api/fs/list path={path}", start)
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception as e:
-        print(f"API Error: {e}")
-    return None
-
-
-def format_size(size_bytes):
-    if size_bytes < 1024:
-        return f"{size_bytes}B"
-    elif size_bytes < 1024 ** 2:
-        return f"{size_bytes / 1024:.1f}KB"
-    elif size_bytes < 1024 ** 3:
-        return f"{size_bytes / 1024 ** 2:.1f}MB"
-    else:
-        return f"{size_bytes / 1024 ** 3:.2f}GB"
-
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/browse")
-def browse():
-    path = request.args.get("path", "/")
-    page = int(request.args.get("page", 1))
-    decoded_path = unquote(path)
-
-    result = call_alist_api(decoded_path, page)
-
-    items = []
-    if result and result.get("code") == 200:
-        content = result.get("data") or {}
-        for item in content.get("content") or []:
-            items.append({
-                "name": item["name"],
-                "path": item["name"],
-                "is_dir": item.get("is_dir", False),
-                "size": format_size(item.get("size", 0)) if not item.get("is_dir") else "",
-                "type": item.get("type", 1),
-                "is_video": not item.get("is_dir", False)
-            })
-
-    return render_template("browse.html",
-                           items=items,
-                           current_path=decoded_path,
-                           page=page)
-
-
-@app.route("/search")
-def search():
-    keyword = request.args.get("keyword", "")
-    if not keyword:
-        return redirect(url_for("index"))
-
-    cached = _get_cached_search(keyword)
-    if cached is not None:
-        return render_template("search.html", results=cached, keyword=keyword)
-
-    all_results = []
-    seen_paths = set()
-
-    try:
-        req_start = time.time()
-        resp = _session.get(
-            f"{ALIST_BASE_URL}/search",
+        resp = requests.get(
+            f"{ALIST_SERVER}/search",
             params={"box": keyword, "type": "video"},
-            headers=HEADERS,
-            timeout=SEARCH_TIMEOUT,
-            stream=True
+            timeout=TIMEOUT
         )
-        # measure TTFB (time to first byte)
-        ttfb = time.time() - req_start
-        body = resp.content
-        body_size = len(body)
-        total_dl = time.time() - req_start
-        resp.close()
-
-        _log_request_time(f"GET /search keyword={keyword}", req_start)
-        print(f"[perf]   TTFB={ttfb * 1000:.0f}ms body_size={body_size / 1024:.0f}KB total={total_dl * 1000:.0f}ms")
-
-        if resp.status_code == 200:
-            strainer = SoupStrainer('a')
-            soup = BeautifulSoup(body, 'lxml', parse_only=strainer)
-
-            keyword_lower = keyword.lower()
-
-            for link in soup:
-                href = link.get('href', '')
-                if not href.startswith('/') or href in seen_paths:
-                    continue
-
-                text = link.get_text(strip=True)
-                if keyword_lower not in text.lower():
-                    continue
-
-                seen_paths.add(href)
-
-                name = href.split('/')[-1]
-                all_results.append({
-                    "name": name or text,
-                    "path": href,
-                    "is_dir": True,
-                    "is_video": False
+        html = resp.text
+        # 小雅搜索结果格式：<a href=/path/to/dir>显示文本</a>
+        # 匹配所有 <a> 标签中的路径和文本
+        pattern = r'<a\s+href=([^>]+)>([^<]+)</a>'
+        matches = re.findall(pattern, html)
+        for href, text in matches:
+            # 只保留以 / 开头的内部路径，排除静态资源等
+            if (href.startswith('/')
+                    and not href.startswith('//')
+                    and not href.startswith('/assets')
+                    and not href.startswith('/d/')
+                    and not href.startswith('/s/')
+                    and not href.startswith('/api/')):
+                results.append({
+                    'path': href,
+                    'name': text.strip()
                 })
-
-                if len(all_results) >= MAX_SEARCH_RESULTS:
-                    break
-
-    except Exception as e:
-        print(f"Search error: {e}")
-
-    _set_cached_search(keyword, all_results)
-
-    return render_template("search.html",
-                           results=all_results,
-                           keyword=keyword)
+    except requests.RequestException as e:
+        print(f"[搜索失败] {e}")
+    return results
 
 
-@app.route("/api/direct_play/<path:file_path>")
-def direct_play(file_path):
-    decoded_path = unquote(file_path)
-    raw_url = get_raw_url(decoded_path)
+# ==================== AList 目录浏览 ====================
+def list_directory(path):
+    """
+    调用 AList API /api/fs/list 列出指定目录内容
+    返回文件和子目录列表
+    """
+    items = []
+    try:
+        resp = requests.post(
+            f"{ALIST_SERVER}/api/fs/list",
+            json={"path": path, "page": 1, "per_page": 200},
+            timeout=TIMEOUT
+        )
+        data = resp.json()
+        if data.get('code') == 200:
+            for item in data.get('data', {}).get('content', []):
+                name = item.get('name', '')
+                is_dir = item.get('is_dir', False)
+                size = item.get('size', 0)
+                # 拼接完整路径
+                full_path = f"{path.rstrip('/')}/{name}"
+                is_video = not is_dir
+                items.append({
+                    'name': name,
+                    'path': full_path,
+                    'is_dir': is_dir,
+                    'is_video': is_video,
+                    'size': size
+                })
+    except requests.RequestException as e:
+        print(f"[目录浏览失败] path={path}, error={e}")
+    return items
 
+
+# ==================== AList 获取文件直链 ====================
+def get_file_raw_url(path):
+    """
+    调用 AList API /api/fs/get 获取文件的真实播放直链（raw_url）
+    该直链可直接用于 PotPlayer 播放
+    """
+    try:
+        resp = requests.post(
+            f"{ALIST_SERVER}/api/fs/get",
+            json={"path": path},
+            timeout=TIMEOUT
+        )
+        data = resp.json()
+        if data.get('code') == 200:
+            raw_url = data.get('data', {}).get('raw_url', '')
+            return raw_url
+    except requests.RequestException as e:
+        print(f"[获取直链失败] path={path}, error={e}")
+    return ''
+
+
+# ==================== Flask 路由 ====================
+@app.route('/')
+def index():
+    """首页：极简搜索页面"""
+    return render_template('index.html')
+
+
+@app.route('/api/search')
+def api_search():
+    """搜索接口：根据关键词搜索视频目录"""
+    keyword = request.args.get('q', '').strip()
+    if not keyword:
+        return jsonify({'results': [], 'error': '请输入搜索关键词'})
+    results = search_xiaoya(keyword)
+    return jsonify({'results': results})
+
+
+@app.route('/api/list')
+def api_list():
+    """目录浏览接口：列出指定路径下的文件和子目录"""
+    path = request.args.get('path', '/').strip()
+    items = list_directory(path)
+    return jsonify({'items': items})
+
+
+@app.route('/api/play')
+def api_play():
+    """播放接口：获取视频文件直链，供前端调用 PotPlayer"""
+    path = request.args.get('path', '').strip()
+    if not path:
+        return jsonify({'url': '', 'error': '路径为空'})
+    raw_url = get_file_raw_url(path)
     if raw_url:
-        return jsonify({"success": True, "raw_url": raw_url})
-    return jsonify({"success": False, "error": "无法获取视频链接"})
+        return jsonify({'url': raw_url})
+    else:
+        return jsonify({'url': '', 'error': '无法获取播放地址'})
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+# ==================== 启动入口 ====================
+if __name__ == '__main__':
+    print(f"数据源: {DATA_URL}")
+    print(f"AList 服务器: {ALIST_SERVER}")
+    print("启动地址: http://127.0.0.1:5000")
+    app.run(debug=True, host='0.0.0.0', port=5000)
