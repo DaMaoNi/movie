@@ -5,16 +5,12 @@
 功能：关键词搜索 → 浏览目录 → 获取直链 → PotPlayer 播放
 """
 
-import socket
-_orig_getaddrinfo = socket.getaddrinfo
-def _getaddrinfo_ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
-    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
-socket.getaddrinfo = _getaddrinfo_ipv4_only
-
 from flask import Flask, render_template, request, jsonify
 import requests
 import re
 import os
+import socket
+from urllib.parse import unquote
 
 app = Flask(__name__)
 
@@ -23,9 +19,27 @@ app = Flask(__name__)
 ALIST_SERVER = os.environ.get("ALIST_SERVER", "http://www.zhanghanhome.cn:5678")
 # 远端 TVBox JSON 数据地址
 DATA_URL = f"{ALIST_SERVER}/tvbox/my.json"
-
 # 请求超时（秒）
 TIMEOUT = 15
+
+
+# ==================== 强制 IPv4 ====================
+def _patch_ipv4():
+    """
+    强制所有 requests 请求使用 IPv4，避免 IPv6 连接超时或失败。
+    原理：猴子补丁 socket.getaddrinfo，过滤掉 AF_INET6 结果，
+    使所有 DNS 解析只返回 IPv4 地址。
+    """
+    _orig = socket.getaddrinfo
+
+    def _ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+        return _orig(host, port, socket.AF_INET, type, proto, flags)
+
+    socket.getaddrinfo = _ipv4_only
+
+
+# 应用启动时立即打补丁
+_patch_ipv4()
 
 
 # ==================== 小雅 AList 搜索 ====================
@@ -54,8 +68,11 @@ def search_xiaoya(keyword):
                     and not href.startswith('/d/')
                     and not href.startswith('/s/')
                     and not href.startswith('/api/')):
+                # 关键修复：搜索结果中的路径含 URL 编码（如 %20），
+                # AList API 需要解码后的真实路径才能正确访问
+                decoded_path = unquote(href)
                 results.append({
-                    'path': href,
+                    'path': decoded_path,
                     'name': text.strip()
                 })
     except requests.RequestException as e:
@@ -84,12 +101,11 @@ def list_directory(path):
                 size = item.get('size', 0)
                 # 拼接完整路径
                 full_path = f"{path.rstrip('/')}/{name}"
-                is_video = not is_dir
+                # 不限制文件后缀，所有文件均可点击（目录进入浏览，文件获取直链播放）
                 items.append({
                     'name': name,
                     'path': full_path,
                     'is_dir': is_dir,
-                    'is_video': is_video,
                     'size': size
                 })
     except requests.RequestException as e:

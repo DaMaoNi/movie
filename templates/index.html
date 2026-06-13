@@ -103,12 +103,12 @@ function browse(path, name) {
         el.appendChild(tip);
         return;
       }
-      /* 分类：目录、视频文件 */
-      var dirs = [], vids = [];
+      /* 分类：目录、文件（不限制后缀，所有文件均可播放） */
+      var dirs = [], files = [];
       for (var i = 0; i < d.items.length; i++) {
         var it = d.items[i];
         if (it.is_dir) dirs.push(it);
-        else if (it.is_video) vids.push(it);
+        else files.push(it);
       }
       /* 渲染子目录 */
       for (var i = 0; i < dirs.length; i++) {
@@ -121,9 +121,9 @@ function browse(path, name) {
         })(it.path, it.name);
         el.appendChild(div);
       }
-      /* 渲染视频文件 */
-      for (var i = 0; i < vids.length; i++) {
-        var it = vids[i];
+      /* 渲染文件（不限制后缀，均可点击播放） */
+      for (var i = 0; i < files.length; i++) {
+        var it = files[i];
         var div = document.createElement('div');
         div.className = 'it vid';
         div.innerHTML = '<span class="tag">播放</span>' + esc(it.name)
